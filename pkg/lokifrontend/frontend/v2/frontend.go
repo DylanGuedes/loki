@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cortexproject/cortex/pkg/frontend/v2/frontendv2pb"
 	"github.com/cortexproject/cortex/pkg/querier/stats"
 	"github.com/cortexproject/cortex/pkg/tenant"
 	"github.com/cortexproject/cortex/pkg/util/grpcclient"
@@ -23,8 +24,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/weaveworks/common/httpgrpc"
 	"go.uber.org/atomic"
-
-	"github.com/grafana/loki/pkg/lokifrontend/frontend/v2/frontendv2pb"
 )
 
 // Config for a Frontend.

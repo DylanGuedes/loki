@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/cortexproject/cortex/pkg/frontend/v1/frontendv1pb"
 	"github.com/cortexproject/cortex/pkg/querier/stats"
 	querier_stats "github.com/cortexproject/cortex/pkg/querier/stats"
 	"github.com/go-kit/kit/log"
@@ -13,8 +14,6 @@ import (
 	"github.com/grafana/dskit/backoff"
 	"github.com/weaveworks/common/httpgrpc"
 	"google.golang.org/grpc"
-
-	"github.com/grafana/loki/pkg/lokifrontend/frontend/v1/frontendv1pb"
 )
 
 var (

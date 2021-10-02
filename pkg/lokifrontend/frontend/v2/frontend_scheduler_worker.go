@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cortexproject/cortex/pkg/frontend/v2/frontendv2pb"
+	"github.com/cortexproject/cortex/pkg/scheduler/schedulerpb"
 	"github.com/cortexproject/cortex/pkg/util"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -14,9 +16,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/weaveworks/common/httpgrpc"
 	"google.golang.org/grpc"
-
-	"github.com/grafana/loki/pkg/lokifrontend/frontend/v2/frontendv2pb"
-	"github.com/grafana/loki/pkg/scheduler/schedulerpb"
 )
 
 type frontendSchedulerWorkers struct {

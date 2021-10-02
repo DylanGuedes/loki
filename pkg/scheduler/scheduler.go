@@ -8,6 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cortexproject/cortex/pkg/frontend/v2/frontendv2pb"
+	"github.com/cortexproject/cortex/pkg/ring"
+	"github.com/cortexproject/cortex/pkg/scheduler/schedulerpb"
 	"github.com/cortexproject/cortex/pkg/tenant"
 	"github.com/cortexproject/cortex/pkg/util"
 	"github.com/cortexproject/cortex/pkg/util/grpcclient"
@@ -26,13 +29,17 @@ import (
 	"github.com/weaveworks/common/user"
 	"google.golang.org/grpc"
 
-	"github.com/grafana/loki/pkg/lokifrontend/frontend/v2/frontendv2pb"
 	"github.com/grafana/loki/pkg/scheduler/queue"
-	"github.com/grafana/loki/pkg/scheduler/schedulerpb"
 )
 
 var (
 	errSchedulerIsNotRunning = errors.New("scheduler is not running")
+)
+
+const (
+	// ringAutoForgetUnhealthyPeriods is how many consecutive timeout periods an unhealthy instance
+	// in the ring will be automatically removed.
+	ringAutoForgetUnhealthyPeriods = 10
 )
 
 // Scheduler is responsible for queueing and dispatching queries to Queriers.
@@ -63,6 +70,10 @@ type Scheduler struct {
 	connectedQuerierClients  prometheus.GaugeFunc
 	connectedFrontendClients prometheus.GaugeFunc
 	queueDuration            prometheus.Histogram
+
+	// Ring used for finding schedulers
+	ringLifecycler *ring.Lifecycler
+	ring           *ring.Ring
 }
 
 type requestKey struct {
@@ -83,12 +94,15 @@ type Config struct {
 	MaxOutstandingPerTenant int               `yaml:"max_outstanding_requests_per_tenant"`
 	QuerierForgetDelay      time.Duration     `yaml:"querier_forget_delay"`
 	GRPCClientConfig        grpcclient.Config `yaml:"grpc_client_config" doc:"description=This configures the gRPC client used to report errors back to the query-frontend."`
+	// Schedulers ring
+	SchedulerRing RingConfig `yaml:"ring,omitempty"`
 }
 
 func (cfg *Config) RegisterFlags(f *flag.FlagSet) {
 	f.IntVar(&cfg.MaxOutstandingPerTenant, "query-scheduler.max-outstanding-requests-per-tenant", 100, "Maximum number of outstanding requests per tenant per query-scheduler. In-flight requests above this limit will fail with HTTP response status code 429.")
 	f.DurationVar(&cfg.QuerierForgetDelay, "query-scheduler.querier-forget-delay", 0, "If a querier disconnects without sending notification about graceful shutdown, the query-scheduler will keep the querier in the tenant's shard until the forget delay has passed. This feature is useful to reduce the blast radius when shuffle-sharding is enabled.")
 	cfg.GRPCClientConfig.RegisterFlagsWithPrefix("query-scheduler.grpc-client-config", f)
+	cfg.SchedulerRing.RegisterFlags(f)
 }
 
 // NewScheduler creates a new Scheduler.
@@ -129,8 +143,47 @@ func NewScheduler(cfg Config, limits Limits, log log.Logger, registerer promethe
 
 	s.activeUsers = util.NewActiveUsersCleanupWithDefaultValues(s.cleanupMetricsForInactiveUser)
 
+	//ringStore, err := kv.NewClient(
+	//	cfg.SchedulerRing.KVStore,
+	//	ring.GetCodec(),
+	//	kv.RegistererWithKVName(prometheus.WrapRegistererWithPrefix("cortex_", registerer), "store-gateway"),
+	//	log,
+	//)
+	//if err != nil {
+	//	return nil, errors.Wrap(err, "create KV store client")
+	//}
+
+	lifecyclerCfg := cfg.SchedulerRing.ToLifecyclerConfig()
+	//if err != nil {
+	//	return nil, errors.Wrap(err, "invalid ring lifecycler config")
+	//}
+
+	// Define lifecycler delegates in reverse order (last to be called defined first because they're
+	// chained via "next delegate").
+	//delegate := ring.BasicLifecyclerDelegate(s)
+	//delegate = ring.NewLeaveOnStoppingDelegate(delegate, log)
+	//delegate = ring.NewTokensPersistencyDelegate(cfg.SchedulerRing.TokensFilePath, ring.JOINING, delegate, log)
+	//delegate = ring.NewAutoForgetDelegate(ringAutoForgetUnhealthyPeriods*cfg.SchedulerRing.HeartbeatTimeout, delegate, log)
+
+	//s.ringLifecycler, err = ring.NewBasicLifecycler(lifecyclerCfg, RingNameForServer, RingKey, ringStore, delegate, log, registerer)
 	var err error
-	s.subservices, err = services.NewManager(s.requestQueue, s.activeUsers)
+	s.ringLifecycler, err = ring.NewLifecycler(lifecyclerCfg, ring.NewNoopFlushTransferer(), RingNameForServer, RingKey, false, registerer)
+	if err != nil {
+		return nil, errors.Wrap(err, "create ring lifecycler")
+	}
+
+	ringCfg := cfg.SchedulerRing.ToRingConfig()
+	//s.ring, err = ring.NewWithStoreClientAndStrategy(ringCfg, RingNameForServer, RingKey, ringStore, ring.NewIgnoreUnhealthyInstancesReplicationStrategy())
+	s.ring, err = ring.New(ringCfg, RingNameForServer, RingKey, registerer)
+	if err != nil {
+		return nil, errors.Wrap(err, "create ring client")
+	}
+
+	if registerer != nil {
+		registerer.MustRegister(s.ring)
+	}
+
+	s.subservices, err = services.NewManager(s.requestQueue, s.activeUsers, s.ringLifecycler, s.ring)
 	if err != nil {
 		return nil, err
 	}
@@ -525,4 +578,30 @@ func (s *Scheduler) getConnectedFrontendClientsMetric() float64 {
 	}
 
 	return float64(count)
+}
+
+//func (s *Scheduler) OnRingInstanceRegister(_ *ring.BasicLifecycler, ringDesc ring.Desc, instanceExists bool, instanceID string, instanceDesc ring.InstanceDesc) (ring.InstanceState, ring.Tokens) {
+//	// When we initialize the store-gateway instance in the ring we want to start from
+//	// a clean situation, so whatever is the state we set it JOINING, while we keep existing
+//	// tokens (if any) or the ones loaded from file.
+//	var tokens []uint32
+//	if instanceExists {
+//		tokens = instanceDesc.GetTokens()
+//	}
+//
+//	takenTokens := ringDesc.GetTokens()
+//	newTokens := ring.GenerateTokens(RingNumTokens-len(tokens), takenTokens)
+//
+//	// Tokens sorting will be enforced by the parent caller.
+//	tokens = append(tokens, newTokens...)
+//
+//	return ring.JOINING, tokens
+//}
+//
+//func (s *Scheduler) OnRingInstanceTokens(_ *ring.BasicLifecycler, _ ring.Tokens) {}
+//func (s *Scheduler) OnRingInstanceStopping(_ *ring.BasicLifecycler)              {}
+//func (s *Scheduler) OnRingInstanceHeartbeat(_ *ring.BasicLifecycler, _ *ring.Desc, _ *ring.InstanceDesc) {}
+
+func (s *Scheduler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	s.ring.ServeHTTP(w, req)
 }

@@ -12,8 +12,11 @@ import (
 
 	"github.com/NYTimes/gziphandler"
 	"github.com/cortexproject/cortex/pkg/cortex"
+	"github.com/cortexproject/cortex/pkg/frontend/v1/frontendv1pb"
+	"github.com/cortexproject/cortex/pkg/frontend/v2/frontendv2pb"
 	"github.com/cortexproject/cortex/pkg/ring"
 	cortex_ruler "github.com/cortexproject/cortex/pkg/ruler"
+	"github.com/cortexproject/cortex/pkg/scheduler/schedulerpb"
 	util_log "github.com/cortexproject/cortex/pkg/util/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/grafana/dskit/kv/codec"
@@ -32,14 +35,11 @@ import (
 	"github.com/grafana/loki/pkg/logql"
 	"github.com/grafana/loki/pkg/lokifrontend/frontend"
 	"github.com/grafana/loki/pkg/lokifrontend/frontend/transport"
-	"github.com/grafana/loki/pkg/lokifrontend/frontend/v1/frontendv1pb"
-	"github.com/grafana/loki/pkg/lokifrontend/frontend/v2/frontendv2pb"
 	"github.com/grafana/loki/pkg/querier"
 	"github.com/grafana/loki/pkg/querier/queryrange"
 	"github.com/grafana/loki/pkg/ruler"
 	"github.com/grafana/loki/pkg/runtime"
 	"github.com/grafana/loki/pkg/scheduler"
-	"github.com/grafana/loki/pkg/scheduler/schedulerpb"
 	loki_storage "github.com/grafana/loki/pkg/storage"
 	"github.com/grafana/loki/pkg/storage/chunk"
 	"github.com/grafana/loki/pkg/storage/chunk/cache"
@@ -657,6 +657,8 @@ func (t *Loki) initIndexGateway() (services.Service, error) {
 }
 
 func (t *Loki) initQueryScheduler() (services.Service, error) {
+	t.Cfg.QueryScheduler.SchedulerRing.ListenPort = t.Cfg.Server.GRPCListenPort
+	t.Cfg.QueryScheduler.SchedulerRing.KVStore.MemberlistKV = t.MemberlistKV.GetMemberlistKV
 	s, err := scheduler.NewScheduler(t.Cfg.QueryScheduler, t.overrides, util_log.Logger, prometheus.DefaultRegisterer)
 	if err != nil {
 		return nil, err
@@ -664,6 +666,7 @@ func (t *Loki) initQueryScheduler() (services.Service, error) {
 
 	schedulerpb.RegisterSchedulerForFrontendServer(t.Server.GRPC, s)
 	schedulerpb.RegisterSchedulerForQuerierServer(t.Server.GRPC, s)
+	t.Server.HTTP.Handle("/scheduler/ring", s)
 	return s, nil
 }
 
