@@ -54,22 +54,16 @@ func (w *ringWatcher) watchLoop(servCtx context.Context) error {
 
 func (w *ringWatcher) lookupAddresses() {
 
-	bufDescs, bufHosts, bufZones := ring.MakeBuffersForGet()
-	level.Info(w.log).Log("repfactor", w.ring.ReplicationFactor())
-	rs, err := w.ring.Get(RingKeyOfLeader, ring.WriteNoExtend, bufDescs, bufHosts, bufZones)
+	addrs, err := w.getAddresses()
 	if err != nil {
-		level.Error(w.log).Log("error finding leader at key %d in the ring", RingKeyOfLeader)
-		return
+		level.Error(w.log).Log("msg", "error getting addresses from ring", "err", err)
 	}
-
-	addrs := rs.GetAddresses()
 
 	if len(addrs) == 0 {
 		return
 	}
 	toAdd := make([]string, 0, len(addrs))
 	for i, newAddr := range addrs {
-		level.Info(w.log).Log("Ring found address: ", newAddr)
 		alreadyExists := false
 		for _, currAddr := range w.addresses {
 			if currAddr == newAddr {
@@ -105,4 +99,30 @@ func (w *ringWatcher) lookupAddresses() {
 
 	w.addresses = addrs
 
+}
+
+func (w *ringWatcher) getAddresses() ([]string, error) {
+	var addrs []string
+
+	// If there are less than 2 existing addresses, odds are we are running just a single instance
+	// so just get the first healthy address and use it. If the call returns to continue on to
+	// check for the actual replicaset instances
+	if len(w.addresses) < 2 {
+		rs, err := w.ring.GetAllHealthy(ring.WriteNoExtend)
+		if err != nil {
+			return nil, err
+		}
+		addrs = rs.GetAddresses()
+		if len(addrs) == 1 {
+			return addrs, nil
+		}
+	}
+
+	bufDescs, bufHosts, bufZones := ring.MakeBuffersForGet()
+	rs, err := w.ring.Get(RingKeyOfLeader, ring.WriteNoExtend, bufDescs, bufHosts, bufZones)
+	if err != nil {
+		return nil, err
+	}
+
+	return rs.GetAddresses(), nil
 }
