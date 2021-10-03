@@ -201,6 +201,7 @@ type Loki struct {
 	MemberlistKV             *memberlist.KVInitService
 	compactor                *compactor.Compactor
 	QueryFrontEndTripperware cortex_tripper.Tripperware
+	queryScheduler           *scheduler.Scheduler
 
 	HTTPAuthMiddleware middleware.Interface
 }
@@ -409,16 +410,16 @@ func (t *Loki) setupModuleManager() error {
 		Distributor:              {Ring, Server, Overrides, TenantConfigs},
 		Store:                    {Overrides},
 		Ingester:                 {Store, Server, MemberlistKV, TenantConfigs},
-		Querier:                  {Store, Ring, Server, IngesterQuerier, TenantConfigs},
+		Querier:                  {QueryScheduler, Store, Ring, Server, IngesterQuerier, TenantConfigs},
 		QueryFrontendTripperware: {Server, Overrides, TenantConfigs},
-		QueryFrontend:            {QueryFrontendTripperware},
+		QueryFrontend:            {QueryScheduler, QueryFrontendTripperware},
 		QueryScheduler:           {Server, Overrides},
 		Ruler:                    {Ring, Server, Store, RulerStorage, IngesterQuerier, Overrides, TenantConfigs},
 		TableManager:             {Server},
 		Compactor:                {Server, Overrides},
 		IndexGateway:             {Server},
 		IngesterQuerier:          {Ring},
-		All:                      {QueryFrontend, QueryScheduler, Querier, Ingester, Distributor, Ruler},
+		All:                      {QueryScheduler, QueryFrontend, Querier, Ingester, Distributor, Ruler},
 	}
 
 	// Add IngesterQuerier as a dependency for store when target is either ingester or querier.

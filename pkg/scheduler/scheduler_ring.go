@@ -108,7 +108,8 @@ func (cfg *RingConfig) ToLifecyclerConfig() ring.LifecyclerConfig {
 	// Configure ring
 	rc.KVStore = cfg.KVStore
 	rc.HeartbeatTimeout = cfg.HeartbeatTimeout
-	rc.ReplicationFactor = 1
+	// We want 2 schedulers so we leverage replication factor to return 2 schedulers from ring Get calls
+	rc.ReplicationFactor = 2
 
 	// Configure lifecycler
 	lc.RingConfig = rc
@@ -127,7 +128,7 @@ func (cfg *RingConfig) ToLifecyclerConfig() ring.LifecyclerConfig {
 
 	// We use a safe default instead of exposing to config option to the user
 	// in order to simplify the config.
-	lc.NumTokens = 512
+	lc.NumTokens = RingNumTokens
 
 	return lc
 }
@@ -139,6 +140,7 @@ func (cfg *RingConfig) ToRingConfig() ring.Config {
 	rc.KVStore = cfg.KVStore
 	rc.HeartbeatTimeout = cfg.HeartbeatTimeout
 	rc.ZoneAwarenessEnabled = cfg.ZoneAwarenessEnabled
+	rc.ReplicationFactor = 2
 
 	return rc
 }

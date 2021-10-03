@@ -7,6 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cortexproject/cortex/pkg/ring"
+	"github.com/cortexproject/cortex/pkg/util"
+	"github.com/cortexproject/cortex/pkg/util/grpcclient"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/grafana/dskit/services"
@@ -15,8 +18,7 @@ import (
 	"github.com/weaveworks/common/httpgrpc"
 	"google.golang.org/grpc"
 
-	"github.com/cortexproject/cortex/pkg/util"
-	"github.com/cortexproject/cortex/pkg/util/grpcclient"
+	lokiutil "github.com/grafana/loki/pkg/util"
 )
 
 type Config struct {
@@ -89,7 +91,7 @@ type querierWorker struct {
 	managers map[string]*processorManager
 }
 
-func NewQuerierWorker(cfg Config, handler RequestHandler, log log.Logger, reg prometheus.Registerer) (services.Service, error) {
+func NewQuerierWorker(cfg Config, ring ring.ReadRing, handler RequestHandler, log log.Logger, reg prometheus.Registerer) (services.Service, error) {
 	if cfg.QuerierID == "" {
 		hostname, err := os.Hostname()
 		if err != nil {
@@ -115,14 +117,17 @@ func NewQuerierWorker(cfg Config, handler RequestHandler, log log.Logger, reg pr
 		address = cfg.FrontendAddress
 		processor = newFrontendProcessor(cfg, handler, log)
 
+	case ring != nil:
+		level.Info(log).Log("msg", "Starting querier worker using query-scheduler and scheduler ring for addresses")
+		processor, servs = newSchedulerProcessor(cfg, handler, log, reg)
 	default:
 		return nil, errors.New("no query-scheduler or query-frontend address")
 	}
 
-	return newQuerierWorkerWithProcessor(cfg, log, processor, address, servs)
+	return newQuerierWorkerWithProcessor(cfg, log, processor, address, ring, servs)
 }
 
-func newQuerierWorkerWithProcessor(cfg Config, log log.Logger, processor processor, address string, servs []services.Service) (*querierWorker, error) {
+func newQuerierWorkerWithProcessor(cfg Config, log log.Logger, processor processor, address string, ring ring.ReadRing, servs []services.Service) (*querierWorker, error) {
 	f := &querierWorker{
 		cfg:       cfg,
 		log:       log,
@@ -137,6 +142,14 @@ func newQuerierWorkerWithProcessor(cfg Config, log log.Logger, processor process
 			return nil, err
 		}
 
+		servs = append(servs, w)
+	}
+
+	if ring != nil {
+		w, err := lokiutil.NewRingWatcher(log, ring, cfg.DNSLookupPeriod, f)
+		if err != nil {
+			return nil, err
+		}
 		servs = append(servs, w)
 	}
 

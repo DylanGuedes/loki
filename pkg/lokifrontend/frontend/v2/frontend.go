@@ -11,6 +11,7 @@ import (
 
 	"github.com/cortexproject/cortex/pkg/frontend/v2/frontendv2pb"
 	"github.com/cortexproject/cortex/pkg/querier/stats"
+	"github.com/cortexproject/cortex/pkg/ring"
 	"github.com/cortexproject/cortex/pkg/tenant"
 	"github.com/cortexproject/cortex/pkg/util/grpcclient"
 	"github.com/cortexproject/cortex/pkg/util/grpcutil"
@@ -100,10 +101,10 @@ type enqueueResult struct {
 }
 
 // NewFrontend creates a new frontend.
-func NewFrontend(cfg Config, log log.Logger, reg prometheus.Registerer) (*Frontend, error) {
+func NewFrontend(cfg Config, ring ring.ReadRing, log log.Logger, reg prometheus.Registerer) (*Frontend, error) {
 	requestsCh := make(chan *frontendRequest)
 
-	schedulerWorkers, err := newFrontendSchedulerWorkers(cfg, fmt.Sprintf("%s:%d", cfg.Addr, cfg.Port), requestsCh, log)
+	schedulerWorkers, err := newFrontendSchedulerWorkers(cfg, fmt.Sprintf("%s:%d", cfg.Addr, cfg.Port), ring, requestsCh, log)
 	if err != nil {
 		return nil, err
 	}

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cortexproject/cortex/pkg/frontend/v2/frontendv2pb"
+	"github.com/cortexproject/cortex/pkg/ring"
 	"github.com/cortexproject/cortex/pkg/scheduler/schedulerpb"
 	"github.com/cortexproject/cortex/pkg/util"
 	"github.com/go-kit/kit/log"
@@ -16,6 +17,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/weaveworks/common/httpgrpc"
 	"google.golang.org/grpc"
+
+	lokiutil "github.com/grafana/loki/pkg/util"
 )
 
 type frontendSchedulerWorkers struct {
@@ -35,7 +38,7 @@ type frontendSchedulerWorkers struct {
 	workers map[string]*frontendSchedulerWorker
 }
 
-func newFrontendSchedulerWorkers(cfg Config, frontendAddress string, requestsCh <-chan *frontendRequest, log log.Logger) (*frontendSchedulerWorkers, error) {
+func newFrontendSchedulerWorkers(cfg Config, frontendAddress string, ring ring.ReadRing, requestsCh <-chan *frontendRequest, log log.Logger) (*frontendSchedulerWorkers, error) {
 	f := &frontendSchedulerWorkers{
 		cfg:             cfg,
 		log:             log,
@@ -44,12 +47,23 @@ func newFrontendSchedulerWorkers(cfg Config, frontendAddress string, requestsCh 
 		workers:         map[string]*frontendSchedulerWorker{},
 	}
 
-	w, err := util.NewDNSWatcher(cfg.SchedulerAddress, cfg.DNSLookupPeriod, f)
-	if err != nil {
-		return nil, err
+	// FIXME can't check for empty address, but should probably switch and error if neither ring or address are valid
+	if ring == nil {
+		w, err := util.NewDNSWatcher(cfg.SchedulerAddress, cfg.DNSLookupPeriod, f)
+		if err != nil {
+			return nil, err
+		}
+		f.watcher = w
 	}
 
-	f.watcher = w
+	if ring != nil {
+		w, err := lokiutil.NewRingWatcher(log, ring, cfg.DNSLookupPeriod, f)
+		if err != nil {
+			return nil, err
+		}
+		f.watcher = w
+	}
+
 	f.Service = services.NewIdleService(f.starting, f.stopping)
 	return f, nil
 }

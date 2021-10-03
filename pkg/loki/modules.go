@@ -207,6 +207,7 @@ func (t *Loki) initQuerier() (services.Service, error) {
 		QuerierWorkerConfig:   &t.Cfg.Worker,
 		QueryFrontendEnabled:  t.Cfg.isModuleEnabled(QueryFrontend),
 		QuerySchedulerEnabled: t.Cfg.isModuleEnabled(QueryScheduler),
+		SchedulerRing:         t.queryScheduler.Ring,
 	}
 
 	var queryHandlers = map[string]http.Handler{
@@ -416,7 +417,7 @@ func (t *Loki) initQueryFrontend() (_ services.Service, err error) {
 		FrontendV1:    t.Cfg.Frontend.FrontendV1,
 		FrontendV2:    t.Cfg.Frontend.FrontendV2,
 		DownstreamURL: t.Cfg.Frontend.DownstreamURL,
-	}, disabledShuffleShardingLimits{}, t.Cfg.Server.GRPCListenPort, util_log.Logger, prometheus.DefaultRegisterer)
+	}, t.queryScheduler.Ring, disabledShuffleShardingLimits{}, t.Cfg.Server.GRPCListenPort, util_log.Logger, prometheus.DefaultRegisterer)
 	if err != nil {
 		return nil, err
 	}
@@ -667,6 +668,7 @@ func (t *Loki) initQueryScheduler() (services.Service, error) {
 	schedulerpb.RegisterSchedulerForFrontendServer(t.Server.GRPC, s)
 	schedulerpb.RegisterSchedulerForQuerierServer(t.Server.GRPC, s)
 	t.Server.HTTP.Handle("/scheduler/ring", s)
+	t.queryScheduler = s
 	return s, nil
 }
 

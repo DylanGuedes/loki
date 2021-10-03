@@ -73,7 +73,7 @@ type Scheduler struct {
 
 	// Ring used for finding schedulers
 	ringLifecycler *ring.Lifecycler
-	ring           *ring.Ring
+	Ring           *ring.Ring
 }
 
 type requestKey struct {
@@ -152,7 +152,6 @@ func NewScheduler(cfg Config, limits Limits, log log.Logger, registerer promethe
 	//if err != nil {
 	//	return nil, errors.Wrap(err, "create KV store client")
 	//}
-
 	lifecyclerCfg := cfg.SchedulerRing.ToLifecyclerConfig()
 	//if err != nil {
 	//	return nil, errors.Wrap(err, "invalid ring lifecycler config")
@@ -174,16 +173,16 @@ func NewScheduler(cfg Config, limits Limits, log log.Logger, registerer promethe
 
 	ringCfg := cfg.SchedulerRing.ToRingConfig()
 	//s.ring, err = ring.NewWithStoreClientAndStrategy(ringCfg, RingNameForServer, RingKey, ringStore, ring.NewIgnoreUnhealthyInstancesReplicationStrategy())
-	s.ring, err = ring.New(ringCfg, RingNameForServer, RingKey, registerer)
+	s.Ring, err = ring.New(ringCfg, RingNameForServer, RingKey, registerer)
 	if err != nil {
 		return nil, errors.Wrap(err, "create ring client")
 	}
 
 	if registerer != nil {
-		registerer.MustRegister(s.ring)
+		registerer.MustRegister(s.Ring)
 	}
 
-	s.subservices, err = services.NewManager(s.requestQueue, s.activeUsers, s.ringLifecycler, s.ring)
+	s.subservices, err = services.NewManager(s.requestQueue, s.activeUsers, s.ringLifecycler, s.Ring)
 	if err != nil {
 		return nil, err
 	}
@@ -603,5 +602,5 @@ func (s *Scheduler) getConnectedFrontendClientsMetric() float64 {
 //func (s *Scheduler) OnRingInstanceHeartbeat(_ *ring.BasicLifecycler, _ *ring.Desc, _ *ring.InstanceDesc) {}
 
 func (s *Scheduler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	s.ring.ServeHTTP(w, req)
+	s.Ring.ServeHTTP(w, req)
 }

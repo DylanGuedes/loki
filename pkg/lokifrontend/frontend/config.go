@@ -4,6 +4,7 @@ import (
 	"flag"
 	"net/http"
 
+	"github.com/cortexproject/cortex/pkg/ring"
 	"github.com/cortexproject/cortex/pkg/util"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -37,7 +38,7 @@ func (cfg *CombinedFrontendConfig) RegisterFlags(f *flag.FlagSet) {
 // Returned RoundTripper can be wrapped in more round-tripper middlewares, and then eventually registered
 // into HTTP server using the Handler from this package. Returned RoundTripper is always non-nil
 // (if there are no errors), and it uses the returned frontend (if any).
-func InitFrontend(cfg CombinedFrontendConfig, limits v1.Limits, grpcListenPort int, log log.Logger, reg prometheus.Registerer) (http.RoundTripper, *v1.Frontend, *v2.Frontend, error) {
+func InitFrontend(cfg CombinedFrontendConfig, ring ring.ReadRing, limits v1.Limits, grpcListenPort int, log log.Logger, reg prometheus.Registerer) (http.RoundTripper, *v1.Frontend, *v2.Frontend, error) {
 	switch {
 	case cfg.DownstreamURL != "":
 		// If the user has specified a downstream Prometheus, then we should use that.
@@ -46,7 +47,7 @@ func InitFrontend(cfg CombinedFrontendConfig, limits v1.Limits, grpcListenPort i
 
 	case cfg.FrontendV2.SchedulerAddress != "":
 		// If query-scheduler address is configured, use Frontend.
-		if cfg.FrontendV2.Addr == "" {
+		if ring == nil && cfg.FrontendV2.Addr == "" {
 			addr, err := util.GetFirstAddressOf(cfg.FrontendV2.InfNames)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to get frontend address")
@@ -59,7 +60,7 @@ func InitFrontend(cfg CombinedFrontendConfig, limits v1.Limits, grpcListenPort i
 			cfg.FrontendV2.Port = grpcListenPort
 		}
 
-		fr, err := v2.NewFrontend(cfg.FrontendV2, log, reg)
+		fr, err := v2.NewFrontend(cfg.FrontendV2, ring, log, reg)
 		return transport.AdaptGrpcRoundTripperToHTTPRoundTripper(fr), nil, fr, err
 
 	default:
