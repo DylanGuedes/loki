@@ -288,6 +288,8 @@ func (s *Scheduler) frontendConnected(frontend schedulerpb.SchedulerForFrontend_
 		return "", nil, errors.New("no frontend address")
 	}
 
+	level.Info(s.log).Log("msg", "frontend connected", "address", msg.FrontendAddress)
+
 	s.connectedFrontendsMu.Lock()
 	defer s.connectedFrontendsMu.Unlock()
 
@@ -307,6 +309,8 @@ func (s *Scheduler) frontendConnected(frontend schedulerpb.SchedulerForFrontend_
 func (s *Scheduler) frontendDisconnected(frontendAddress string) {
 	s.connectedFrontendsMu.Lock()
 	defer s.connectedFrontendsMu.Unlock()
+
+	level.Info(s.log).Log("msg", "frontend disconnected", "address", frontendAddress)
 
 	cf := s.connectedFrontends[frontendAddress]
 	cf.connections--
@@ -389,6 +393,7 @@ func (s *Scheduler) QuerierLoop(querier schedulerpb.SchedulerForQuerier_QuerierL
 	}
 
 	querierID := resp.GetQuerierID()
+	level.Info(s.log).Log("msg", "querier connected", "querier", querierID)
 
 	s.requestQueue.RegisterQuerierConnection(querierID)
 	defer s.requestQueue.UnregisterQuerierConnection(querierID)
