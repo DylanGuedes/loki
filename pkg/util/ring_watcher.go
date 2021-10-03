@@ -64,6 +64,7 @@ func (w *ringWatcher) lookupAddresses() {
 	}
 	toAdd := make([]string, 0, len(addrs))
 	for i, newAddr := range addrs {
+		level.Info(w.log).Log("msg", "found scheduler", "addr", newAddr)
 		alreadyExists := false
 		for _, currAddr := range w.addresses {
 			if currAddr == newAddr {
