@@ -413,7 +413,7 @@ func (t *Loki) setupModuleManager() error {
 		Querier:                  {QueryScheduler, Store, Ring, Server, IngesterQuerier, TenantConfigs},
 		QueryFrontendTripperware: {Server, Overrides, TenantConfigs},
 		QueryFrontend:            {QueryScheduler, QueryFrontendTripperware},
-		QueryScheduler:           {Server, Overrides},
+		QueryScheduler:           {Server, Overrides, MemberlistKV},
 		Ruler:                    {Ring, Server, Store, RulerStorage, IngesterQuerier, Overrides, TenantConfigs},
 		TableManager:             {Server},
 		Compactor:                {Server, Overrides},
