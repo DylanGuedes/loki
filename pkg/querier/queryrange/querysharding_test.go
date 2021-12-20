@@ -12,8 +12,8 @@ import (
 
 	"github.com/cortexproject/cortex/pkg/cortexpb"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
-	"github.com/cortexproject/cortex/pkg/util"
 	"github.com/go-kit/log"
+	"github.com/grafana/loki/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/weaveworks/common/user"
 

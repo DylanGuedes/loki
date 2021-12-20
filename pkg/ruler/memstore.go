@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/cortexproject/cortex/pkg/querier/series"
-	"github.com/cortexproject/cortex/pkg/util"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/grafana/loki/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
