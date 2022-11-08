@@ -279,3 +279,26 @@ func setup(enabled bool) *testContext {
 		rateStore:  NewRateStore(cfg, ring, cp, &fakeOverrides{enabled: enabled}, nil),
 	}
 }
+
+func TestAggregateOverShard(t *testing.T) {
+	tc := setup(true)
+	streamRates := map[string]*logproto.StreamRate{
+		"fake:123": &logproto.StreamRate{StreamHash: 123, StreamHashNoShard: 1234, Rate: 3, Tenant: "fake"},
+		"fake:124": &logproto.StreamRate{StreamHash: 124, StreamHashNoShard: 1234, Rate: 5, Tenant: "fake"},
+	}
+	got := tc.rateStore.aggregateByShard(streamRates)
+	expected := map[string]int64{
+		"fake:1234": 8,
+	}
+	require.EqualValues(t, expected, got)
+
+	streamRates2 := map[string]*logproto.StreamRate{
+		"fake:123": &logproto.StreamRate{StreamHash: 223, StreamHashNoShard: 1234, Rate: 7, Tenant: "fake"},
+		"fake:124": &logproto.StreamRate{StreamHash: 224, StreamHashNoShard: 1234, Rate: 11, Tenant: "fake"},
+	}
+	tc.rateStore.aggregateByShard(streamRates2)
+	expected = map[string]int64{
+		"fake:1234": 26,
+	}
+	require.EqualValues(t, expected, got)
+}
